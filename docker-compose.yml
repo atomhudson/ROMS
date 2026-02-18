@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # 1. MySQL Database
+  # ============================================
+  mysql:
+    image: mysql:8.0
+    container_name: oms-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: orderdb
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - oms-network
+
+  # ============================================
+  # 2. Spring Boot Backend
+  # ============================================
+  backend:
+    build:
+      context: ./oms/oms
+      dockerfile: Dockerfile
+    container_name: oms-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - oms-network
+
+  # ============================================
+  # 3. React Frontend (nginx)
+  # ============================================
+  frontend:
+    build:
+      context: ./order-ui
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_BASE=
+        - REACT_APP_WS_URL=/ws
+    container_name: oms-frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+    networks:
+      - oms-network
+
+  # ============================================
+  # 4. Prometheus
+  # ============================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: oms-prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+    networks:
+      - oms-network
+
+  # ============================================
+  # 5. Grafana
+  # ============================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: oms-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/oms-dashboard.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - oms-network
+
+volumes:
+  mysql_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  oms-network:
+    driver: bridge
