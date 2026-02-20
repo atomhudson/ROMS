@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createOrder } from '../services/api';
+import { createOrder, fetchOrders, fetchPipeline } from '../services/api';
 import { connectWebSocket, disconnectWebSocket } from '../services/websocket';
+import { useAuth } from '../context/AuthContext';
 import StatusBadge, { STATUS_LABELS } from '../components/StatusBadge';
 import ToastContainer, { useToast } from '../components/ToastNotification';
 
-const ORDER_FLOW = ['CREATED', 'PROCESSING', 'PROCESSED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVER', 'DELIVERED'];
+// Will be loaded dynamically from backend
+const DEFAULT_ORDER_FLOW = ['CREATED', 'PROCESSING', 'PROCESSED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVER', 'DELIVERED'];
 
 const ClientPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [tab, setTab] = useState('place'); // 'place' or 'track'
   const [isConnected, setIsConnected] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
+  const [orderFlow, setOrderFlow] = useState(DEFAULT_ORDER_FLOW);
 
   // Place Order state
   const [productName, setProductName] = useState('');
@@ -54,10 +58,27 @@ const ClientPage = () => {
     );
   }, [addToast]);
 
+  // Load pipeline config + existing orders on mount
   useEffect(() => {
-    connectWebSocket(handleOrderUpdate, () => setIsConnected(true), () => setIsConnected(false));
+    fetchPipeline()
+      .then(statuses => {
+        const nonTerminal = statuses.filter(s => !s.terminal).map(s => s.name);
+        const terminal = statuses.filter(s => s.terminal && s.name !== 'CANCELED').map(s => s.name);
+        setOrderFlow([...nonTerminal, ...terminal]);
+      })
+      .catch(() => {}); // fallback to DEFAULT_ORDER_FLOW
+
+    fetchOrders()
+      .then(orders => setRecentOrders(orders))
+      .catch(() => {});
+  }, []);
+
+  // Connect WebSocket with userId for targeted notifications
+  useEffect(() => {
+    if (!user) return;
+    connectWebSocket(handleOrderUpdate, () => setIsConnected(true), () => setIsConnected(false), user.userId);
     return () => disconnectWebSocket();
-  }, [handleOrderUpdate]);
+  }, [handleOrderUpdate, user]);
 
   // Place Order
   const handlePlaceOrder = async (e) => {
@@ -92,7 +113,7 @@ const ClientPage = () => {
   };
 
   const getStepIndex = (status) => {
-    const idx = ORDER_FLOW.indexOf(status);
+    const idx = orderFlow.indexOf(status);
     return idx >= 0 ? idx : -1;
   };
 
@@ -216,7 +237,7 @@ const ClientPage = () => {
                   <div className="mt-2">
                     <p className="text-xs text-dark-400 mb-3 uppercase tracking-wider font-semibold">Live Tracking</p>
                     <div className="space-y-1">
-                      {ORDER_FLOW.map((step, i) => {
+                      {orderFlow.map((step, i) => {
                         const currentIdx = getStepIndex(placedOrder.status);
                         const isCompleted = i <= currentIdx;
                         const isCurrent = i === currentIdx;
@@ -303,7 +324,7 @@ const ClientPage = () => {
 
                 {/* Progress Steps */}
                 <div className="flex items-center justify-between gap-1">
-                  {ORDER_FLOW.map((step, i) => {
+                  {orderFlow.map((step, i) => {
                     const currentIdx = getStepIndex(trackedOrder.status);
                     const isCompleted = i <= currentIdx;
                     return (

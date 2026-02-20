@@ -1,6 +1,5 @@
 package com.datahook.oms.models;
 
-import com.datahook.oms.constants.OrderStatus;
 import jakarta.persistence.*;
 import java.util.Date;
 
@@ -11,9 +10,12 @@ public class Order {
     String id;
 
     String productName;
-    OrderStatus status;
+    String status;
     double price;
     Date createdTime;
+
+    @Column(nullable = false)
+    String userId;
 
     public String getId() {
         return id;
@@ -31,11 +33,11 @@ public class Order {
         this.productName = productName;
     }
 
-    public OrderStatus getStatus() {
+    public String getStatus() {
         return status;
     }
 
-    public void setStatus(OrderStatus status) {
+    public void setStatus(String status) {
         this.status = status;
     }
 
@@ -53,5 +55,13 @@ public class Order {
 
     public void setCreatedTime(Date createdTime) {
         this.createdTime = createdTime;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 }

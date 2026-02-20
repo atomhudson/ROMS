@@ -7,7 +7,16 @@ const WS_URL = process.env.REACT_APP_WS_URL || 'http://localhost:8080/ws';
 
 let stompClient = null;
 
-export const connectWebSocket = (onOrderUpdate, onConnected, onDisconnected) => {
+/**
+ * Connect to WebSocket with optional user-specific topic.
+ * 
+ * @param onOrderUpdate - callback for order updates
+ * @param onConnected - callback on connection established
+ * @param onDisconnected - callback on disconnection
+ * @param userId - if provided, subscribes to /topic/orders.{userId} (client mode)
+ *                 if null, subscribes to /topic/orders (admin mode — sees all)
+ */
+export const connectWebSocket = (onOrderUpdate, onConnected, onDisconnected, userId) => {
   stompClient = new Client({
     webSocketFactory: () => new SockJS(WS_URL),
     reconnectDelay: 5000,
@@ -17,7 +26,11 @@ export const connectWebSocket = (onOrderUpdate, onConnected, onDisconnected) => 
       console.log('WebSocket Connected');
       if (onConnected) onConnected();
 
-      stompClient.subscribe('/topic/orders', (message) => {
+      // Subscribe to the appropriate topic
+      const topic = userId ? `/topic/orders.${userId}` : '/topic/orders';
+      console.log(`Subscribing to: ${topic}`);
+
+      stompClient.subscribe(topic, (message) => {
         const order = JSON.parse(message.body);
         if (onOrderUpdate) onOrderUpdate(order);
       });

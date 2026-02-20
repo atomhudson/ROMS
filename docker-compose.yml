@@ -27,16 +27,22 @@ services:
   # ============================================
   backend:
     build:
-      context: ./oms/oms
+      context: ./roms-backend
       dockerfile: Dockerfile
     container_name: oms-backend
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      SPRING_PROFILES_ACTIVE: docker,dev
     ports:
       - "8080:8080"
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     networks:
       - oms-network
 
@@ -45,14 +51,14 @@ services:
   # ============================================
   frontend:
     build:
-      context: ./order-ui
+      context: ./roms-ui
       dockerfile: Dockerfile
       args:
         - REACT_APP_API_BASE=
         - REACT_APP_WS_URL=/ws
     container_name: oms-frontend
     ports:
-      - "3001:80"
+      - "3000:80"
     depends_on:
       - backend
     networks:
@@ -65,7 +71,7 @@ services:
     image: prom/prometheus:latest
     container_name: oms-prometheus
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./roms-monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
@@ -85,13 +91,34 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/oms-dashboard.json
     volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./roms-monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./roms-monitoring/grafana/dashboards:/var/lib/grafana/dashboards
       - grafana_data:/var/lib/grafana
     ports:
-      - "3000:3000"
+      - "3030:3000"
     depends_on:
       - prometheus
+    networks:
+      - oms-network
+
+  # ============================================
+  # 6. K6 Load Testing
+  # ============================================
+  # Run:  docker-compose --profile loadtest run k6
+  # Spike: docker-compose --profile loadtest run -e SCENARIO=spike k6
+  # Stress: docker-compose --profile loadtest run -e SCENARIO=stress k6
+  k6:
+    build:
+      context: ./roms-load-test
+      dockerfile: Dockerfile
+    container_name: oms-k6
+    profiles:
+      - loadtest
+    environment:
+      - SCENARIO=${SCENARIO:-standard}
+    depends_on:
+      backend:
+        condition: service_healthy
     networks:
       - oms-network
 

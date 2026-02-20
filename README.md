@@ -12,27 +12,27 @@ graph TB
         direction TB
         
         subgraph "Data Layer"
-            DB["🗄️ MySQL 8.0\n:3307 → :3306\norderdb"]
+            DB["🗄️ MySQL 8.0<br>:3307 → :3306<br>orderdb"]
         end
         
         subgraph "Application Layer"
-            BE["⚙️ Spring Boot 4\n:8080\nREST + WebSocket + Actuator"]
+            BE["⚙️ Spring Boot 4<br>:8080<br>REST + WebSocket + Actuator"]
         end
         
         subgraph "Presentation Layer"
-            FE["🖥️ React 19 + Nginx\n:3001 → :80\nAdmin + Client Portal"]
+            FE["🖥️ React 19 + Nginx<br>:3001 → :80<br>Admin + Client Portal"]
         end
         
         subgraph "Monitoring Layer"
-            PROM["📈 Prometheus\n:9090\nMetrics scraping"]
-            GRAF["📊 Grafana\n:3000\n11-panel dashboard"]
+            PROM["📈 Prometheus<br>:9090<br>Metrics scraping"]
+            GRAF["📊 Grafana<br>:3000<br>11-panel dashboard"]
         end
     end
 
-    FE -- "REST API\n/orders, /webhook" --> BE
-    FE -- "STOMP over WebSocket\n/ws → /topic/orders" --> BE
+    FE -- "REST API<br>/orders, /webhook" --> BE
+    FE -- "STOMP over WebSocket<br>/ws → /topic/orders" --> BE
     BE -- "JPA / Hibernate" --> DB
-    PROM -- "scrape /actuator/prometheus\nevery 5s" --> BE
+    PROM -- "scrape /actuator/prometheus<br>every 5s" --> BE
     GRAF -- "PromQL queries" --> PROM
 
     CLIENT["👤 Client Browser"] --> FE
@@ -44,13 +44,14 @@ graph TB
     style FE fill:#1a3b2f,stroke:#22c55e
     style PROM fill:#5a3100,stroke:#f59e0b
     style GRAF fill:#5a3100,stroke:#f59e0b
+
 ```
 
 ## Quick Start
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/atomhudson/ROMS.git
 cd "Real Time OMS"
 
 # Start everything (builds + runs all 5 services)
@@ -73,10 +74,10 @@ docker compose logs -f
 ## Project Structure
 
 ```
-Real Time OMS/
+ROMS/
 ├── docker-compose.yml              # 🐳 5-service orchestration
 │
-├── oms/oms/                        # ⚙️ Spring Boot Backend
+├── roms-backend/                   # ⚙️ Spring Boot Backend
 │   ├── Dockerfile                  #    Multi-stage Maven → JRE
 │   ├── pom.xml                     #    Maven dependencies
 │   ├── README.md                   #    📖 Backend documentation
@@ -93,7 +94,7 @@ Real Time OMS/
 │           ├── application.properties
 │           └── application-docker.properties
 │
-├── order-ui/                       # 🖥️ React Frontend
+├── roms-ui/                        # 🖥️ React Frontend
 │   ├── Dockerfile                  #    Multi-stage Node → Nginx
 │   ├── nginx.conf                  #    Proxy config
 │   ├── .env.docker                 #    Docker env vars
@@ -103,7 +104,7 @@ Real Time OMS/
 │       ├── components/             #    Dashboard, OrderTable, NodeGraph, Toast...
 │       └── services/               #    api.js (Axios), websocket.js (STOMP)
 │
-└── monitoring/                     # 📊 Monitoring Stack
+└── roms-monitoring/                # 📊 Monitoring Stack
     ├── README.md                   #    📖 Monitoring documentation
     ├── prometheus/
     │   └── prometheus.yml          #    Scrape config (5s interval)

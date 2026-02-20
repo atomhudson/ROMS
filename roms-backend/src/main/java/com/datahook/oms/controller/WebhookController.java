@@ -1,6 +1,5 @@
 package com.datahook.oms.controller;
 
-import com.datahook.oms.constants.OrderStatus;
 import com.datahook.oms.services.OrderService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -37,7 +36,7 @@ public class WebhookController {
         return webhookTimer.record(() -> {
             try {
                 String orderId = payload.get("orderId").toString();
-                OrderStatus status = OrderStatus.valueOf(payload.get("status").toString());
+                String status = payload.get("status").toString();
 
                 orderService.updateStatus(orderId, status);
                 webhookCalls.increment();
