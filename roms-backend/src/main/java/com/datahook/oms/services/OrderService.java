@@ -1,79 +1,75 @@
 package com.datahook.oms.services;
 
+import com.datahook.oms.configuration.RabbitConfig;
+import com.datahook.oms.events.OrderMessage;
 import com.datahook.oms.models.Order;
 import com.datahook.oms.repository.OrderRepository;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.file.AccessDeniedException;
-import java.util.Date;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class OrderService {
-
-    private final Counter ordersCreated;
-    private final Counter messagesSent;
-    private final MeterRegistry registry;
 
     @Autowired
     private OrderRepository orderRepository;
 
     @Autowired
-    private SimpMessagingTemplate messagingTemplate;
+    private RabbitTemplate rabbitTemplate;
 
-    public OrderService(MeterRegistry registry) {
-        this.registry = registry;
-        this.ordersCreated = registry.counter("orders.created");
-        this.messagesSent = registry.counter("ws.messages.sent");
-    }
-
-    private String orderIDCreation() {
-        return "ORD" +
-                UUID.randomUUID()
-                        .toString()
-                        .replace("-", "")
-                        .substring(0, 8)
-                        .toUpperCase();
-    }
+    // ──── Write operations: publish to RabbitMQ (async) ────
 
     /**
-     * Dual notification: admin broadcast + user-specific.
-     */
-    private void notifyClients(Order order) {
-        // Admin broadcast — admin sees ALL orders
-        messagingTemplate.convertAndSend("/topic/orders", order);
-
-        // User-specific — only the order's owner gets this
-        if (order.getUserId() != null && !order.getUserId().isEmpty()) {
-            messagingTemplate.convertAndSend(
-                    "/topic/orders." + order.getUserId(), order
-            );
-        }
-        messagesSent.increment();
-    }
-
-    /**
-     * Create an order, linked to the authenticated user.
+     * Publish order creation to RabbitMQ. Returns immediately with the order
+     * (ID + status pre-assigned). Actual DB write happens in OrderConsumer.
      */
     public Order createOrder(Order order, String userId) {
-        order.setId(orderIDCreation());
+        order.setId(generateOrderId());
         order.setStatus("CREATED");
         order.setCreatedTime(new Date());
         order.setUserId(userId);
-        Order saved = orderRepository.save(order);
-        ordersCreated.increment();
-        notifyClients(saved);
-        return saved;
+
+        OrderMessage msg = OrderMessage.createOrder(order);
+        rabbitTemplate.convertAndSend(
+                RabbitConfig.ORDER_EXCHANGE,
+                RabbitConfig.ORDER_CREATE_KEY,
+                msg
+        );
+        return order; // return immediately with pre-assigned ID
     }
 
     /**
-     * Get orders — ADMIN sees all, CLIENT sees only their own.
+     * Publish status update to RabbitMQ (with auth context).
      */
+    public void updateStatus(String orderId, String status, String userId, boolean isAdmin) {
+        OrderMessage msg = OrderMessage.statusUpdate(orderId, status, userId, isAdmin);
+        rabbitTemplate.convertAndSend(
+                RabbitConfig.ORDER_EXCHANGE,
+                RabbitConfig.ORDER_STATUS_KEY,
+                msg
+        );
+    }
+
+    /**
+     * Publish status update from webhook (no auth check).
+     */
+    public void updateStatus(String orderId, String status) {
+        OrderMessage msg = OrderMessage.webhookUpdate(orderId, status);
+        rabbitTemplate.convertAndSend(
+                RabbitConfig.ORDER_EXCHANGE,
+                RabbitConfig.ORDER_STATUS_KEY,
+                msg
+        );
+    }
+
+    // ──── Read operations: direct DB (synchronous, read-only) ────
+
+    @Transactional(readOnly = true)
     public List<Order> getOrders(String userId, boolean isAdmin) {
         if (isAdmin) {
             return orderRepository.findAll();
@@ -81,48 +77,41 @@ public class OrderService {
         return orderRepository.findByUserId(userId);
     }
 
-    /**
-     * Get all orders (for admin/webhook use).
-     */
+    @Transactional(readOnly = true)
+    public Page<Order> getOrders(String userId, boolean isAdmin, Pageable pageable) {
+        if (isAdmin) {
+            return orderRepository.findAll(pageable);
+        }
+        return orderRepository.findByUserId(userId, pageable);
+    }
+
+    @Transactional(readOnly = true)
     public List<Order> getOrders() {
         return orderRepository.findAll();
     }
 
-    /**
-     * Update order status with ownership enforcement.
-     * - ADMIN can update any order
-     * - CLIENT can only update their own orders
-     */
-    public Order updateStatus(String id, String status, String userId, boolean isAdmin)
-            throws AccessDeniedException {
-        Order order = orderRepository.findById(id).orElseThrow();
-
-        if (!isAdmin && !order.getUserId().equals(userId)) {
-            throw new AccessDeniedException("Not authorized to update this order");
-        }
-
-        order.setStatus(status);
-        Order updated = orderRepository.save(order);
-        registry.counter(
-                "orders.status.updates",
-                "status", status
-        ).increment();
-        notifyClients(updated);
-        return updated;
+    @Transactional(readOnly = true)
+    public long countAll() {
+        return orderRepository.count();
     }
 
-    /**
-     * Update status without auth check (for webhook/system use).
-     */
-    public Order updateStatus(String id, String status) {
-        Order order = orderRepository.findById(id).orElseThrow();
-        order.setStatus(status);
-        Order updated = orderRepository.save(order);
-        registry.counter(
-                "orders.status.updates",
-                "status", status
-        ).increment();
-        notifyClients(updated);
-        return updated;
+    @Transactional(readOnly = true)
+    public Map<String, Long> countByStatusGroup() {
+        Map<String, Long> result = new HashMap<>();
+        for (Object[] row : orderRepository.countGroupByStatus()) {
+            result.put((String) row[0], (Long) row[1]);
+        }
+        return result;
+    }
+
+    // ──── Utility ────
+
+    private String generateOrderId() {
+        return "ORD" +
+                UUID.randomUUID()
+                        .toString()
+                        .replace("-", "")
+                        .substring(0, 8)
+                        .toUpperCase();
     }
 }

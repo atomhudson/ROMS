@@ -18,6 +18,13 @@ const AdminPage = () => {
   const [error, setError] = useState('');
   const [updatedOrderIds, setUpdatedOrderIds] = useState(new Set());
   const { toasts, addToast, removeToast } = useToast();
+  const [statsRefreshKey, setStatsRefreshKey] = useState(0);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const PAGE_SIZE = 20;
 
   // Webhook simulator state
   const [webhookOrderId, setWebhookOrderId] = useState('');
@@ -26,33 +33,46 @@ const AdminPage = () => {
   const [webhookResult, setWebhookResult] = useState(null);
   const [webhookLog, setWebhookLog] = useState([]);
 
-  // Fetch initial orders
-  useEffect(() => {
-    const loadOrders = async () => {
-      try {
-        const data = await fetchOrders();
-        setOrders(data);
-        setError('');
-      } catch (err) {
-        setError('Unable to connect to server. Ensure backend is running on port 8080.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadOrders();
+  // Fetch orders (paginated)
+  const loadOrders = useCallback(async (page = 0) => {
+    try {
+      setLoading(true);
+      const data = await fetchOrders({ page, size: PAGE_SIZE });
+      setOrders(data.content || []);
+      setCurrentPage(data.page);
+      setTotalPages(data.totalPages);
+      setTotalElements(data.totalElements);
+      setError('');
+    } catch (err) {
+      setError('Unable to connect to server. Ensure backend is running on port 8080.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
+  const handlePageChange = (page) => {
+    loadOrders(page);
+  };
 
   // WebSocket updates with toast notifications
   const handleOrderUpdate = useCallback((updatedOrder) => {
     setOrders((prev) => {
       const idx = prev.findIndex((o) => o.id === updatedOrder.id);
       if (idx >= 0) {
+        // Order is on the current page → update in-place
         const newOrders = [...prev];
         newOrders[idx] = updatedOrder;
         return newOrders;
       }
-      return [updatedOrder, ...prev];
+      // Order is NOT on the current page → don't prepend (would break pagination)
+      return prev;
     });
+    // Bump refresh key so Dashboard re-fetches stats instantly
+    setStatsRefreshKey((k) => k + 1);
     setUpdatedOrderIds((prev) => new Set(prev).add(updatedOrder.id));
     setTimeout(() => {
       setUpdatedOrderIds((prev) => { const n = new Set(prev); n.delete(updatedOrder.id); return n; });
@@ -158,7 +178,7 @@ const AdminPage = () => {
           )}
 
           {/* Dashboard Cards */}
-          <Dashboard orders={orders} />
+          <Dashboard refreshKey={statsRefreshKey} />
 
           {/* Live Connection Map */}
           <NodeGraph />
@@ -170,7 +190,7 @@ const AdminPage = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-white">All Orders</h2>
-                  <p className="text-xs text-dark-400 mt-0.5">{orders.length} total — updates in real-time via WebSocket</p>
+                  <p className="text-xs text-dark-400 mt-0.5">{totalElements} total — page {currentPage + 1} of {totalPages} — updates in real-time via WebSocket</p>
                 </div>
               </div>
               {loading ? (
@@ -182,7 +202,15 @@ const AdminPage = () => {
                   <p className="text-sm text-dark-400">Loading orders...</p>
                 </div>
               ) : (
-                <OrderTable orders={orders} updatedOrderIds={updatedOrderIds} />
+                <OrderTable
+                  orders={orders}
+                  updatedOrderIds={updatedOrderIds}
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalElements={totalElements}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={handlePageChange}
+                />
               )}
             </div>
 
@@ -292,7 +320,8 @@ const AdminPage = () => {
         isOpen={showForm}
         onClose={() => setShowForm(false)}
         onOrderCreated={(order) => {
-          setOrders((prev) => prev.find((o) => o.id === order.id) ? prev : [order, ...prev]);
+          // Re-fetch page 0 to show the new order at the top
+          loadOrders(0);
           addToast(`Order ${order.id} created successfully!`, 'success');
         }}
       />

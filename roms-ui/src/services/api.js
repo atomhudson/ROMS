@@ -35,9 +35,9 @@ api.interceptors.response.use(
   }
 );
 
-export const fetchOrders = async () => {
-  const response = await api.get('/orders');
-  return response.data;
+export const fetchOrders = async ({ page = 0, size = 20, sort = 'createdTime,desc' } = {}) => {
+  const response = await api.get('/orders', { params: { page, size, sort } });
+  return response.data; // { content, page, size, totalElements, totalPages }
 };
 
 export const createOrder = async (order) => {
@@ -53,6 +53,11 @@ export const updateOrderStatus = async (id, status) => {
 export const simulateWebhook = async (orderId, status) => {
   const response = await api.post('/webhook/payment', { orderId, status });
   return response.data;
+};
+
+export const fetchOrderStats = async () => {
+  const response = await api.get('/orders/stats');
+  return response.data; // { total, statusCounts: { CREATED: N, PROCESSING: N, ... } }
 };
 
 export const fetchMetricsSummary = async () => {

@@ -4,7 +4,7 @@ import { updateOrderStatus } from '../services/api';
 
 const ALL_STATUSES = Object.keys(STATUS_LABELS);
 
-const OrderTable = ({ orders, updatedOrderIds }) => {
+const OrderTable = ({ orders, updatedOrderIds, currentPage = 0, totalPages = 1, totalElements = 0, pageSize = 20, onPageChange }) => {
   const [updatingId, setUpdatingId] = useState(null);
 
   const handleStatusChange = async (orderId, newStatus) => {
@@ -36,7 +36,30 @@ const OrderTable = ({ orders, updatedOrderIds }) => {
     }).format(price);
   };
 
-  if (orders.length === 0) {
+  // Generate page numbers with ellipsis for large page counts
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    let start = Math.max(0, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible);
+    if (end - start < maxVisible) {
+      start = Math.max(0, end - maxVisible);
+    }
+    if (start > 0) {
+      pages.push(0);
+      if (start > 1) pages.push('...');
+    }
+    for (let i = start; i < end; i++) {
+      pages.push(i);
+    }
+    if (end < totalPages) {
+      if (end < totalPages - 1) pages.push('...');
+      pages.push(totalPages - 1);
+    }
+    return pages;
+  };
+
+  if (orders.length === 0 && currentPage === 0) {
     return (
       <div className="rounded-2xl bg-dark-800/30 border border-dark-700/30 p-12 text-center animate-fade-in">
         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-dark-700/40 flex items-center justify-center">
@@ -49,6 +72,9 @@ const OrderTable = ({ orders, updatedOrderIds }) => {
       </div>
     );
   }
+
+  const startItem = currentPage * pageSize + 1;
+  const endItem = Math.min((currentPage + 1) * pageSize, totalElements);
 
   return (
     <div className="rounded-2xl bg-dark-800/30 border border-dark-700/30 overflow-hidden animate-fade-in">
@@ -167,6 +193,67 @@ const OrderTable = ({ orders, updatedOrderIds }) => {
           </div>
         ))}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && onPageChange && (
+        <div className="border-t border-dark-700/30 px-5 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3">
+          {/* Page Info */}
+          <p className="text-xs text-dark-400">
+            Showing <span className="font-semibold text-dark-200">{startItem}–{endItem}</span> of{' '}
+            <span className="font-semibold text-dark-200">{totalElements}</span> orders
+          </p>
+
+          {/* Page Controls */}
+          <div className="flex items-center gap-1">
+            {/* Previous */}
+            <button
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage === 0}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200
+                disabled:opacity-30 disabled:cursor-not-allowed
+                text-dark-300 hover:text-white hover:bg-dark-700/50"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+              Prev
+            </button>
+
+            {/* Page Numbers */}
+            {getPageNumbers().map((p, i) =>
+              p === '...' ? (
+                <span key={`ellipsis-${i}`} className="px-1.5 text-xs text-dark-500">…</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => onPageChange(p)}
+                  className={`min-w-[28px] h-7 rounded-lg text-xs font-semibold transition-all duration-200
+                    ${p === currentPage
+                      ? 'bg-gradient-to-r from-accent-purple to-accent-indigo text-white shadow-lg shadow-accent-purple/25'
+                      : 'text-dark-300 hover:text-white hover:bg-dark-700/50'
+                    }`}
+                >
+                  {p + 1}
+                </button>
+              )
+            )}
+
+            {/* Next */}
+            <button
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages - 1}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200
+                disabled:opacity-30 disabled:cursor-not-allowed
+                text-dark-300 hover:text-white hover:bg-dark-700/50"
+            >
+              Next
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

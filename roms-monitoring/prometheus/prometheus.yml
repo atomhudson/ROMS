@@ -9,3 +9,10 @@ scrape_configs:
       - targets: ['backend:8080']
         labels:
           application: 'oms-backend'
+
+  - job_name: 'rabbitmq'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['rabbitmq:15692']
+        labels:
+          application: 'oms-rabbitmq'

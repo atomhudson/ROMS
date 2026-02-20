@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ============================================
   # 1. MySQL Database
@@ -14,6 +12,7 @@ services:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    command: --max-connections=200 --innodb-buffer-pool-size=256M --innodb-log-file-size=64M
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
       interval: 10s
@@ -23,7 +22,32 @@ services:
       - oms-network
 
   # ============================================
-  # 2. Spring Boot Backend
+  # 2. RabbitMQ
+  # ============================================
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: oms-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+      - "15692:15692"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbitmq_prometheus return_per_object_metrics true"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./roms-monitoring/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - oms-network
+
+  # ============================================
+  # 3. Backend API (HTTP only — no consumers)
   # ============================================
   backend:
     build:
@@ -31,11 +55,14 @@ services:
       dockerfile: Dockerfile
     container_name: oms-backend
     environment:
-      SPRING_PROFILES_ACTIVE: docker,dev
+      SPRING_PROFILES_ACTIVE: docker,dev,api
+      JAVA_TOOL_OPTIONS: "-XX:+UseG1GC -XX:MaxRAMPercentage=75.0 -XX:MaxGCPauseMillis=100"
     ports:
       - "8080:8080"
     depends_on:
       mysql:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health || exit 1"]
@@ -47,7 +74,26 @@ services:
       - oms-network
 
   # ============================================
-  # 3. React Frontend (nginx)
+  # 4. Backend Consumer (RabbitMQ only — no HTTP)
+  # ============================================
+  consumer:
+    build:
+      context: ./roms-backend
+      dockerfile: Dockerfile
+    container_name: oms-consumer
+    environment:
+      SPRING_PROFILES_ACTIVE: docker,dev,consumer
+      JAVA_TOOL_OPTIONS: "-XX:+UseG1GC -XX:MaxRAMPercentage=75.0 -XX:MaxGCPauseMillis=100"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - oms-network
+
+  # ============================================
+  # 5. React Frontend (nginx)
   # ============================================
   frontend:
     build:
@@ -65,7 +111,7 @@ services:
       - oms-network
 
   # ============================================
-  # 4. Prometheus
+  # 6. Prometheus
   # ============================================
   prometheus:
     image: prom/prometheus:latest
@@ -81,7 +127,7 @@ services:
       - oms-network
 
   # ============================================
-  # 5. Grafana
+  # 7. Grafana
   # ============================================
   grafana:
     image: grafana/grafana:latest
@@ -102,20 +148,22 @@ services:
       - oms-network
 
   # ============================================
-  # 6. K6 Load Testing
+  # 8. K6 Load Testing
   # ============================================
   # Run:  docker-compose --profile loadtest run k6
   # Spike: docker-compose --profile loadtest run -e SCENARIO=spike k6
   # Stress: docker-compose --profile loadtest run -e SCENARIO=stress k6
   k6:
-    build:
-      context: ./roms-load-test
-      dockerfile: Dockerfile
+    image: grafana/k6:latest
     container_name: oms-k6
     profiles:
       - loadtest
+    volumes:
+      - ./roms-load-test:/scripts
     environment:
       - SCENARIO=${SCENARIO:-standard}
+    entrypoint: []
+    command: ["sh", "-c", "k6 run --env BASE_URL=http://backend:8080 --env SCENARIO=${SCENARIO:-standard} /scripts/load-test.js"]
     depends_on:
       backend:
         condition: service_healthy
@@ -124,6 +172,7 @@ services:
 
 volumes:
   mysql_data:
+  rabbitmq_data:
   prometheus_data:
   grafana_data:
 

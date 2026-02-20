@@ -1,0 +1,376 @@
+{
+    "annotations": {
+        "list": []
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "id": null,
+    "links": [],
+    "panels": [
+        {
+            "title": "📬 Queue Depth — Messages Ready",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+            },
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "fillOpacity": 20,
+                        "lineWidth": 2
+                    },
+                    "unit": "short"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "rabbitmq_queue_messages_ready",
+                    "legendFormat": "{{queue}} ready",
+                    "refId": "A"
+                },
+                {
+                    "expr": "rabbitmq_queue_messages_unacked",
+                    "legendFormat": "{{queue}} unacked",
+                    "refId": "B"
+                }
+            ]
+        },
+        {
+            "title": "⚡ Message Rates (per second)",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 0
+            },
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "fillOpacity": 10,
+                        "lineWidth": 2
+                    },
+                    "unit": "ops"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "rate(rabbitmq_queue_messages_published_total[1m])",
+                    "legendFormat": "{{queue}} published/s",
+                    "refId": "A"
+                },
+                {
+                    "expr": "rate(rabbitmq_queue_messages_delivered_total[1m])",
+                    "legendFormat": "{{queue}} delivered/s",
+                    "refId": "B"
+                },
+                {
+                    "expr": "rate(rabbitmq_queue_messages_acked_total[1m])",
+                    "legendFormat": "{{queue}} acked/s",
+                    "refId": "C"
+                }
+            ]
+        },
+        {
+            "title": "👥 Consumers",
+            "type": "stat",
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 0,
+                "y": 8
+            },
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 1
+                            },
+                            {
+                                "color": "green",
+                                "value": 5
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "options": {
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ]
+                },
+                "colorMode": "background",
+                "graphMode": "none"
+            },
+            "targets": [
+                {
+                    "expr": "sum(rabbitmq_queue_consumers)",
+                    "legendFormat": "Total Consumers",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "🔌 Connections",
+            "type": "stat",
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 6,
+                "y": 8
+            },
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 50
+                            },
+                            {
+                                "color": "red",
+                                "value": 100
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "options": {
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ]
+                },
+                "colorMode": "background",
+                "graphMode": "none"
+            },
+            "targets": [
+                {
+                    "expr": "rabbitmq_connections",
+                    "legendFormat": "Connections",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "📡 Channels",
+            "type": "stat",
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 12,
+                "y": 8
+            },
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 100
+                            },
+                            {
+                                "color": "red",
+                                "value": 200
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "options": {
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ]
+                },
+                "colorMode": "background",
+                "graphMode": "none"
+            },
+            "targets": [
+                {
+                    "expr": "rabbitmq_channels",
+                    "legendFormat": "Channels",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "📊 Total Messages in Queues",
+            "type": "stat",
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 18,
+                "y": 8
+            },
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 100
+                            },
+                            {
+                                "color": "red",
+                                "value": 1000
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "options": {
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ]
+                },
+                "colorMode": "background",
+                "graphMode": "none"
+            },
+            "targets": [
+                {
+                    "expr": "sum(rabbitmq_queue_messages)",
+                    "legendFormat": "Total Messages",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "📈 Queue Depth Over Time",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 12
+            },
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "fillOpacity": 30,
+                        "lineWidth": 2,
+                        "stacking": {
+                            "mode": "normal"
+                        }
+                    },
+                    "unit": "short"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "rabbitmq_queue_messages{queue=~\"order.*\"}",
+                    "legendFormat": "{{queue}}",
+                    "refId": "A"
+                }
+            ]
+        }
+    ],
+    "schemaVersion": 39,
+    "tags": [
+        "rabbitmq",
+        "oms"
+    ],
+    "templating": {
+        "list": [
+            {
+                "current": {
+                    "selected": false,
+                    "text": "Prometheus",
+                    "value": "Prometheus"
+                },
+                "hide": 0,
+                "includeAll": false,
+                "name": "DS_PROMETHEUS",
+                "options": [],
+                "query": "prometheus",
+                "type": "datasource"
+            }
+        ]
+    },
+    "time": {
+        "from": "now-15m",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "RabbitMQ — OMS Queues",
+    "uid": "oms-rabbitmq",
+    "version": 1
+}

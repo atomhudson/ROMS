@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { fetchOrderStats } from '../services/api';
 
 const CARDS = [
   {
@@ -11,7 +12,7 @@ const CARDS = [
     ),
     gradient: 'from-violet-500 to-purple-600',
     shadow: 'shadow-violet-500/20',
-    filter: null,
+    statusGroup: null,
   },
   {
     key: 'created',
@@ -23,7 +24,7 @@ const CARDS = [
     ),
     gradient: 'from-blue-500 to-cyan-500',
     shadow: 'shadow-blue-500/20',
-    filter: (o) => o.status === 'CREATED',
+    statusGroup: ['CREATED'],
   },
   {
     key: 'processing',
@@ -35,7 +36,7 @@ const CARDS = [
     ),
     gradient: 'from-amber-500 to-orange-500',
     shadow: 'shadow-amber-500/20',
-    filter: (o) => o.status === 'PROCESSING' || o.status === 'PROCESSED',
+    statusGroup: ['PROCESSING', 'PROCESSED'],
   },
   {
     key: 'shipped',
@@ -47,7 +48,7 @@ const CARDS = [
     ),
     gradient: 'from-indigo-500 to-violet-500',
     shadow: 'shadow-indigo-500/20',
-    filter: (o) => o.status === 'SHIPPED' || o.status === 'IN_TRANSIT' || o.status === 'OUT_FOR_DELIVER',
+    statusGroup: ['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVER'],
   },
   {
     key: 'delivered',
@@ -59,7 +60,7 @@ const CARDS = [
     ),
     gradient: 'from-emerald-500 to-teal-500',
     shadow: 'shadow-emerald-500/20',
-    filter: (o) => o.status === 'DELIVERED',
+    statusGroup: ['DELIVERED'],
   },
   {
     key: 'canceled',
@@ -71,15 +72,50 @@ const CARDS = [
     ),
     gradient: 'from-rose-500 to-pink-500',
     shadow: 'shadow-rose-500/20',
-    filter: (o) => o.status === 'CANCELED',
+    statusGroup: ['CANCELED'],
   },
 ];
 
-const Dashboard = ({ orders }) => {
+/**
+ * Dashboard stats cards.
+ * Props:
+ *   refreshKey — bump this counter to trigger an immediate re-fetch (e.g. on WebSocket event)
+ */
+const Dashboard = ({ refreshKey = 0 }) => {
+  const [stats, setStats] = useState({ total: 0, statusCounts: {} });
+
+  const loadStats = useCallback(async () => {
+    try {
+      const data = await fetchOrderStats();
+      setStats(data);
+    } catch (err) {
+      // silently ignore
+    }
+  }, []);
+
+  // Refresh whenever refreshKey changes (WebSocket event) or on mount
+  useEffect(() => {
+    loadStats();
+  }, [loadStats, refreshKey]);
+
+  // Also poll every 5s as a safety net
+  useEffect(() => {
+    const interval = setInterval(loadStats, 5000);
+    return () => clearInterval(interval);
+  }, [loadStats]);
+
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       {CARDS.map((card) => {
-        const count = card.filter ? orders.filter(card.filter).length : orders.length;
+        let count;
+        if (!card.statusGroup) {
+          count = stats.total || 0;
+        } else {
+          count = card.statusGroup.reduce(
+            (sum, s) => sum + (stats.statusCounts[s] || 0),
+            0,
+          );
+        }
         return (
           <div
             key={card.key}
@@ -92,7 +128,6 @@ const Dashboard = ({ orders }) => {
               animate-slide-up
             `}
           >
-            {/* Gradient glow effect on hover */}
             <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
             
             <div className="relative z-10 flex flex-col gap-2">

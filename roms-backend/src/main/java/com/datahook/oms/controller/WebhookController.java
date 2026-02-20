@@ -5,6 +5,8 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,16 +34,17 @@ public class WebhookController {
     }
 
     @PostMapping("/payment")
-    public String paymentWebhook(@RequestBody Map<String, Object> payload) {
+    public ResponseEntity<String> paymentWebhook(@RequestBody Map<String, Object> payload) {
         return webhookTimer.record(() -> {
             try {
                 String orderId = payload.get("orderId").toString();
                 String status = payload.get("status").toString();
 
+                // Publishes to RabbitMQ — returns immediately
                 orderService.updateStatus(orderId, status);
                 webhookCalls.increment();
 
-                return "Webhook processed";
+                return ResponseEntity.status(HttpStatus.ACCEPTED).body("Webhook queued");
             } catch (Exception e) {
                 webhookErrors.increment();
                 throw e;

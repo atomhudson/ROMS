@@ -30,6 +30,12 @@ const ClientPage = () => {
   const [trackError, setTrackError] = useState('');
   const [recentOrders, setRecentOrders] = useState([]);
 
+  // Pagination state for recent orders
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const PAGE_SIZE = 10;
+
   // WebSocket — listen for real-time updates
   const handleOrderUpdate = useCallback((updatedOrder) => {
     // Update placed order if it matches
@@ -58,6 +64,19 @@ const ClientPage = () => {
     );
   }, [addToast]);
 
+  // Load orders paginated
+  const loadOrders = useCallback(async (page = 0) => {
+    try {
+      const data = await fetchOrders({ page, size: PAGE_SIZE });
+      setRecentOrders(data.content || []);
+      setCurrentPage(data.page);
+      setTotalPages(data.totalPages);
+      setTotalElements(data.totalElements);
+    } catch (err) {
+      // silently fail
+    }
+  }, []);
+
   // Load pipeline config + existing orders on mount
   useEffect(() => {
     fetchPipeline()
@@ -68,10 +87,12 @@ const ClientPage = () => {
       })
       .catch(() => {}); // fallback to DEFAULT_ORDER_FLOW
 
-    fetchOrders()
-      .then(orders => setRecentOrders(orders))
-      .catch(() => {});
-  }, []);
+    loadOrders();
+  }, [loadOrders]);
+
+  const handlePageChange = (page) => {
+    loadOrders(page);
+  };
 
   // Connect WebSocket with userId for targeted notifications
   useEffect(() => {
@@ -89,7 +110,8 @@ const ClientPage = () => {
     try {
       const order = await createOrder({ productName: productName.trim(), price: parseFloat(price) });
       setPlacedOrder(order);
-      setRecentOrders((prev) => [order, ...prev]);
+      // Re-fetch page 0 to include the new order
+      loadOrders(0);
       setProductName('');
       setPrice('');
     } catch (err) {
@@ -352,7 +374,10 @@ const ClientPage = () => {
             {/* Recent Orders From This Session */}
             {recentOrders.length > 0 && (
               <div className="rounded-2xl bg-dark-800/50 border border-dark-700/40 p-6">
-                <h3 className="text-sm font-bold text-white mb-3 uppercase tracking-wider">Your Recent Orders</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Your Recent Orders</h3>
+                  <span className="text-[10px] text-dark-500">{totalElements} total</span>
+                </div>
                 <div className="space-y-2">
                   {recentOrders.map((order) => (
                     <button key={order.id} onClick={() => { setTrackId(order.id); setTrackedOrder(order); setTrackError(''); }}
@@ -366,6 +391,42 @@ const ClientPage = () => {
                     </button>
                   ))}
                 </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-xs text-dark-400">
+                      Page <span className="font-semibold text-dark-200">{currentPage + 1}</span> of{' '}
+                      <span className="font-semibold text-dark-200">{totalPages}</span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 0}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200
+                          disabled:opacity-30 disabled:cursor-not-allowed
+                          text-dark-300 hover:text-white hover:bg-dark-700/50 border border-dark-700/30"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                        </svg>
+                        Prev
+                      </button>
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= totalPages - 1}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200
+                          disabled:opacity-30 disabled:cursor-not-allowed
+                          text-dark-300 hover:text-white hover:bg-dark-700/50 border border-dark-700/30"
+                      >
+                        Next
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
